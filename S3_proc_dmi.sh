@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 
 set -o errexit
 set -o nounset
@@ -113,14 +113,17 @@ if [[ -z ${xml:-} ]]; then
 	exit 1
 fi
 
-for folder in $(ls ${inpath} | grep S3._OL_1_EFR); do
+#for folder in $(ls ${inpath} | grep S3._OL_1_EFR); do
+# --> Make sure to look at folders and not at tar files!
+for folder in $(ls -d ${inpath}/S3*OL_1_EFR*.SEN3); do
+
 	olci_folder=$(basename "${folder}")
 	olci_dts=$(echo "${olci_folder}" | rev | cut -d_ -f11 | rev)
 	dest=${outpath}/${olci_dts}
 
 	# skipping if scene already processed
 	if [[ -d "${dest}" ]]; then
-		if [[ -f "${dest}/r_TOA_01.tif" ]]; then
+		if [[ -s "${dest}/r_TOA_01.tif" ]]; then
 			log_warn "${dest} already exists, scene skipped"
 			continue
 		fi
@@ -167,10 +170,16 @@ for folder in $(ls ${inpath} | grep S3._OL_1_EFR); do
 		echo " - S3 input SLSTR not processed: ${inpath}/${slstr_folder}" >> ${txt}
 		echo " " >> ${txt}
 					
-		# remove destination folder ot the scene
+		# remove destination folder of the scene
 		rm -rf  ${dest}
-		echo "Process next scene!"
 
+		log_warn "**********************************************************"		
+		log_warn "GPT ERROR for scene ${olci_dts}"
+		log_warn " - removed folder ${dest}" 
+		log_warn " - S3 input OLCI not processed: ${inpath}/${olci_folder}"}
+		log_warn " - S3 input SLSTR not processed: ${inpath}/${slstr_folder}" 
+		log_warn "Process next scene!"
+	
 		# go to next scene
 		continue
 
@@ -180,7 +189,9 @@ for folder in $(ls ${inpath} | grep S3._OL_1_EFR); do
 	# -Ds3tbx.reader.olci.pixelGeoCoding=true \
 	# -Ds3tbx.reader.slstrl1b.pixelGeoCodings=true \
 
+	log_info "*******************"		
 	log_info "gpt: Finished"
+	log_info "*******************"		
 
 	# # Discard out bad folders (defined as size > 10 GB)
 	# (cd ${dest}/../; du -sm * | awk '$1 > 10000 {print $2}' | xargs rm -fr)

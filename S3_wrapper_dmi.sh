@@ -1,19 +1,21 @@
 #!/bin/bash
 
 # Wrapper for running SICE pipeline
-if [ $# -eq 2 ]; then
+if [ $# -eq 4 ]; then
   YYYYMMHH=$1
-  projectDir=$2
+  region=$2  
+  projectDir=$3
+  txtDir=$4
 else
    echo "ERROR: incorrect number of command line arguments!"  
-   echo "Expected S3_wrapper_dmi.sh <YYYYMMDD> <projectDir>"
+   echo "Expected S3_wrapper_dmi.sh <YYYYMMDD> <region> <projectDir> <txtDir>"
    exit 1
 fi
 
 set -o errexit
 set -o nounset
 set -o pipefail
-set -x
+#set -x
 
 red='\033[0;31m'
 orange='\033[0;33m'
@@ -36,22 +38,12 @@ export PROJ_LIB=/usr/share/proj
 # Expected S3 input data for a given date
 SEN3_source=${projectDir}/S3_inputdata                
 
-# Outputs will be stored here
+# Outputs will be stored here, but this is 'region' dependent 
 proc_root=${projectDir}/S3_outputdata/proc_SICE            
 mosaic_root=${projectDir}/S3_outputdata/mosaic_proc_SICE  
-
-# We do not use 'dhusget_wrapper', hence we do not need SEN3_local, username, password
-skip_dhusget_wrapper=true
-
-#SEN3_local=/eodata/Sentinel-3
-# Scihub credentials (from local auth.txt in SICE folder)
-#username=$(sed -n '1p' auth.txt)
-#password=$(sed -n '2p' auth.txt)
  
-# Geographic area
-area=Greenland
-# according to the area, specify name of mask to use
-mask_to_link=Greenland_300m.tif
+# according to the region, specify the resolution of the mask to use, e.g: Greenland_300m.tif
+tifres=300m.tif
 
 # Slope correction
 slopey=false
@@ -59,11 +51,6 @@ slopey=false
 # Fast processing
 fast=true
 
-# Error reporting
-error=false
-
-# Txt where to store scenes that gpt cannot process for ‘File size too big. TIFF file size is limited to [4294967296] bytes!’
-txt_file=${proc_root}/gpt_err_scenes_${YYYYMMHH}.txt
 ################################################################################################
 
 if [ "$fast" = true ]; then
@@ -83,23 +70,55 @@ day=`echo $YYYYMMHH | cut -c7-8`
 
 date=${year}-${month}-${day}
 
-echo "**************************************"
-echo "Input date to process is: ${date}"
-echo "Area/mask to use is: ${mask_to_link}"
-echo "**************************************"
+proc_root_region=${proc_root}/${region}/${date}            
+
+# I need to diversify, because date is added later by dm.sh 
+mosaic_root_region=${mosaic_root}/${region}
+
+# Mask (tif file) to link
+mask_to_link=${region}_${tifres}
+
+# Txt where to store scenes that gpt cannot process for ‘File size too big. TIFF file size is limited to [4294967296] bytes!’
+txt_file=${txtDir}/gpt_err_scenes_${YYYYMMHH}.txt
+
+log_info "******************************************"
+log_info "Input date to process is: ${date}"
+log_info "HOSTNAME: ${HOSTNAME}"
+log_info "projectDir: ${projectDir}"
+log_info "SEN3_source: ${SEN3_source}"
+log_info "Processing region: ${region}" 
+log_info "Mask/Resolution to use is: ${mask_to_link}"
+log_info "******************************************"
 
 # Check if input data exist for the given date
 if [[ ! -d "${SEN3_source}/${year}/${date}" ]]; then
-  echo "WARNING: S3 input data not found for ${date}! S3 input data dir ${SEN3_source}/${year}/${date} does not exist!"
+  log_err "S3 input data not found for ${date}! S3 input data dir ${SEN3_source}/${year}/${date} does not exist!"
   exit 1
 fi
 
-# Check if the expecetd output dir exists  for the given date
-if [[ -d "${mosaic_root}/${date}" ]] && [[ -e "${mosaic_root}/${date}/conc.tif" ]]; then
-  #log_warn "${mosaic_root}/${date} already exists, date skipped"
-  #continue
-  echo "WARNING: Expected ${mosaic_root}/${date} already exists! Skip processing!"
+if [[ ! -d "${proc_root_region}" ]]; then
+  mkdir -p  ${proc_root_region}
+fi
+ 
+if [[ ! -d "${mosaic_root_region}" ]]; then
+  mkdir -p  ${mosaic_root_region}
+fi
+
+if [[ ! -e "masks/${mask_to_link}" ]]; then
+  log_err "Expected mask to link ${mask_to_link} does not exist!"
   exit 1
+fi
+
+# make sure we link the righ mask
+if [[ -e mask.tif ]]; then
+  rm mask.tif
+  ln -s masks/${mask_to_link} mask.tif
+fi
+
+# Check if the expecetd output dir exists and have an output product for the given date
+if [[ -d "${mosaic_root_region}/${date}" ]] && [[ -s "${mosaic_root_region}/${date}/conc.tif" ]]; then
+ log_warn "${mosaic_root_region}/${date} already contains outputs, we skip the processing"
+ exit 0
 fi
 
 # remove previous txt file if exist 
@@ -107,43 +126,59 @@ if [[ -e "${txt_file}" ]]; then
   rm ${txt_file}
 fi
 
-# make sure we link the righ mask
-if [[ -e mask.tif ]]; then
- rm mask.tif
- ln -s masks/${mask_to_link} mask.tif
-fi
-
-# Processing
-
-if [ "$skip_dhusget_wrapper" = false ]; then
-  ### Fetch one day of OLCI & SLSTR scenes over Greenland
-  ## Use local files (PTEP, DIAS, etc.)
-
-  ./dhusget_wrapper.sh -d "${date}" -l ${SEN3_local} -o ${SEN3_source}/${year}/"${date}" \
-	-f ${area} -u "${username}" -p "${password}" || error=true
-  # Download files
-  ./dhusget_wrapper.sh -d ${date} -o ${SEN3_source}/${year}/${date} \
- 			 -f Svalbard -u "${username}" -p "${password}"
-fi
+log_info "******************************"
+log_info "Executing S3_proc_dmi.sh..... "
+log_info "******************************"
 
 # SNAP: Reproject, calculate reflectance, extract bands, etc.
-./S3_proc_dmi.sh -i ${SEN3_source}/${year}/"${date}" -o ${proc_root}/"${date}" -X ${xml_file} -T ${txt_file} -t || error=true
-  
-# Run the Simple Cloud Detection Algorithm (SCDA)
-python ./SCDA.py ${proc_root}/"${date}" || error=true
+./S3_proc_dmi.sh -i ${SEN3_source}/${year}/"${date}" -o ${proc_root_region} -X ${xml_file} -T ${txt_file} -t 
 
+result=${?}
+if [ ${result} -ne 0 ] ; then
+ log_err "S3_proc_dmi.sh processing error for ${date} and region ${region}"
+fi  
+
+log_info "***********************"
+log_info "Executing SCDA.py..... "
+log_info "***********************"
+# Run the Simple Cloud Detection Algorithm (SCDA)
+python ./SCDA.py ${proc_root_region}
+
+result=${?}
+if [ ${result} -ne 0 ] ; then
+  log_err "SCDA.py processing error for ${date} and region ${region}"
+fi  
+
+log_info "*********************"
+log_info "Executing dm.sh..... "
+log_info "*********************"
 # Mosaic
-./dm.sh "${date}" ${proc_root}/"${date}" ${mosaic_root} || error=true
+./dm.sh "${date}" ${proc_root_region} ${mosaic_root_region} 
+
+result=${?}
+if [ ${result} -ne 0 ] ; then
+  log_err "dm.sh processing error for ${date} and region ${region}"
+fi  
 
 if [ "${slopey}" = true ]; then
   # Run the slopey correction
-  python ./get_ITOAR.py ${mosaic_root}/"${date}"/ "$(pwd)"/ArcticDEM/ || error=true
+  python ./get_ITOAR.py ${mosaic_root_region} / "$(pwd)"/ArcticDEM/ 
+
+  result=${?}
+  if [ ${result} -ne 0 ] ; then
+    log_err "get_ITOAR.py processing error for ${date} and region ${region}"
+  fi  
 fi
 
+log_info "***********************"
+log_info "Executing sice.py..... "
+log_info "***********************"
 # SICE
-python ./sice.py ${mosaic_root}/"${date}" || error=true
+python ./sice.py ${mosaic_root_region}/${date}
 
-if [ "${error}" = true ]; then
-  echo "Processing of ${date} failed, please check logs."
-fi
+result=${?}
+if [ ${result} -ne 0 ] ; then
+  log_err "sice.py processing error for ${date} and region ${region}"
+fi  
+
 

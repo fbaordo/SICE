@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 
 set -o errexit
 set -o nounset
@@ -8,6 +8,8 @@ set -x
 declare folder=$1
 declare mask=$2
 declare resize=$3
+
+nParallel=1
 
 tifopts='type=Float32 createopt=COMPRESS=DEFLATE,PREDICTOR=2,TILED=YES --q --o'
 
@@ -27,6 +29,6 @@ r.out.gdal -c -m input=SZA output=${folder}/SZA.tif ${tifopts} --q
 r.out.gdal -c -m input=mask output=${folder}/mask.tif ${tifopts} --q
 
 # process all other GeoTIFF files
-parallel -j 1 "r.in.gdal input={} output={/.} --q --o" ::: $(ls ${folder}/*_x.tif)
+parallel -j ${nParallel} "r.in.gdal input={} output={/.} --q --o" ::: $(ls ${folder}/*_x.tif)
 out_list=$(g.list type=raster | grep -Ev "mask|MASK|SZA" | sed 's/_x//')
-parallel -j 1 "r.out.gdal -m -c input={}_x output=${folder}/{}.tif ${tifopts} --o" ::: ${out_list}
+parallel -j ${nParallel} "r.out.gdal -m -c input={}_x output=${folder}/{}.tif ${tifopts} --o" ::: ${out_list}

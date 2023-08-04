@@ -1,6 +1,6 @@
-#!/usr/bin/env bash
+#!/bin/bash
 
-set -o errexit
+#set -o errexit
 set -o nounset
 set -o pipefail
 set -x
@@ -8,6 +8,8 @@ set -x
 declare date=$1
 declare infolder=$2
 declare outfolder=$3
+
+nParallel=1
 
 red='\033[0;31m'
 orange='\033[0;33m'
@@ -59,7 +61,7 @@ for scene in ${scenes}; do
 		continue
 	fi
 	log_info "Importing rasters: ${scene}"
-	parallel -j 1 "r.external source={} output={/.} --q" ::: ${files}
+	parallel -j ${nParallel} "r.external source={} output={/.} --q" ::: ${files}
 
 	log_info "Masking clouds in SZA raster"
 	r.grow input=SCDA_v20 output=SCDA_grow radius=-5 new=-1 --q # increase clouds by 5 pixels
@@ -67,11 +69,18 @@ for scene in ${scenes}; do
 	r.clump -d input=SCDA_grow output=SCDA_clump --q
 	# frink "(1000 m)^2 -> hectares" 100 hectares per pixel, so value=10000 -> 10 pixels
 	# this sometimes fails. Force success (||true) and check for failure on next line.
-	r.reclass.area -c input=SCDA_clump output=SCDA_area value=10000 mode=greater --q || true
+	
+	#FB: change logic to check how many time this ends up in error
+	#r.reclass.area -c input=SCDA_clump output=SCDA_area value=10000 mode=greater --q || true
+	r.reclass.area -c input=SCDA_clump output=SCDA_area value=10000 mode=greater --q
+	result=${?}
+        if [ ${result} -ne 0 ] ; then
+         log_warn "  --> ERROR No areas of size greater than or equal to 10000 hectares found for rasters: ${scene}"
+        fi
 	[[ "" == $(g.list type=raster pattern=SCDA_area) ]] && r.mapcalc "SCDA_area = null()" --q
 	# SZA_CM is SZA but Cloud Masked: Invalid where buffered clouds over ice w/ valid SZA
 	r.mapcalc "SCDA_final = if((isnull(SCDA_area) && (MASK@PERMANENT == 220)) || (isnull(SCDA_v20) && (MASK@PERMANENT != 220)), null(), 1)" --q
-	r.mapcalc "SZA_CM = if(not(isnull(SZA)) & SCDA_final, 1, null())" --q
+	r.mapcalc "SZA_CM = if(not(isnull(SZA)) & SCDA_final, 1, null())" --q	
 done
 
 # Bands for which invalid pixels are kept (r_TOA and BT)
@@ -144,7 +153,8 @@ echo "${output}" >>${outfolder}/${date}/scenes_lut.txt
 
 # generate a raster of nulls that we can then patch into
 log_info "Initializing mosaic scenes..."
-parallel -j 1 "r.mapcalc \"{} = null()\" --o --q" ::: ${bands}
+
+parallel -j ${nParallel} "r.mapcalc \"{} = null()\" --o --q" ::: ${bands}
 
 ### REFERENCE LOOP VERSION
 # Patch each BAND based on the minimum SZA_LUT
@@ -169,7 +179,7 @@ doit() {
 }
 export -f doit
 
-parallel -j 1 doit {1} {2} {3} ::: sza_lut ::: ${sza_lut_idxs} ::: ${bands}
+parallel -j ${nParallel} doit {1} {2} {3} ::: sza_lut ::: ${sza_lut_idxs} ::: ${bands}
 
 # diagnostics
 r.series input=${sza_list} method=count output=num_scenes_cloudfree --q
@@ -179,11 +189,12 @@ r.series input=${raster_list} method=count output=num_scenes --q
 
 bandsFloat32="$(g.list type=raster pattern="r_TOA_*") SZA SZA_CM SAA OZA OAA WV O3 NDSI BT_S7 BT_S8 BT_S9 r_TOA_S5 r_TOA_S5_rc r_TOA_S1 height SCDA_v20 SCDA_grow SCDA_clump SCDA_area SCDA_final"
 bandsInt16="sza_lut num_scenes num_scenes_cloudfree"
+
 log_info "Writing mosaics to disk..."
 
 tifopts='type=Float32 createopt=COMPRESS=DEFLATE,PREDICTOR=2,TILED=YES --q --o'
-parallel -j 1 "r.colors map={} color=grey --q" ::: ${bandsFloat32} # grayscale
-parallel -j 1 "r.null map={} setnull=inf --q" ::: ${bandsFloat32}  # set inf to null
+parallel -j ${nParallel} "r.colors map={} color=grey --q" ::: ${bandsFloat32} # grayscale
+parallel -j ${nParallel} "r.null map={} setnull=inf --q" ::: ${bandsFloat32}  # set inf to null
 parallel "r.out.gdal -m -c input={} output=${outfolder}/${date}/{}.tif ${tifopts}" ::: ${bandsFloat32}
 
 tifopts='type=Int16 createopt=COMPRESS=DEFLATE,PREDICTOR=2,TILED=YES --q --o'

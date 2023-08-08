@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/bash
 
 #-------------------------------------------------------------------------------------------	#
 # Demo script illustrating some examples using the OData interface	#

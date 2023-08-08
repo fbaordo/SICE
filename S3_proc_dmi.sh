@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/bash
 
 set -o errexit
 set -o nounset
@@ -123,10 +123,16 @@ for folder in $(ls -d ${inpath}/S3*OL_1_EFR*.SEN3); do
 
 	# skipping if scene already processed
 	if [[ -d "${dest}" ]]; then
-		if [[ -s "${dest}/r_TOA_01.tif" ]]; then
-			log_warn "${dest} already exists, scene skipped"
+		#if [[ -s "${dest}/r_TOA_01.tif" ]]; then
+		if [[ -s "${dest}/procScene.done" ]]; then
+			log_warn "${dest}/procScene.done exists, skip scene!"
 			continue
 		fi
+		if [[ -s "${dest}/procScene.err" ]]; then
+			log_warn "${dest}/procScene.err exists, skip scene!"
+			continue
+		fi
+
 	fi
 
 	# find nearest SLSTR folder. Timestamp is same or next minute.
@@ -137,18 +143,24 @@ for folder in $(ls -d ${inpath}/S3*OL_1_EFR*.SEN3); do
 	fileroot="S3._SL_1_RBT____........T" # grep for acquisition not ingest time
 	# pick first nearby slstr
 	slstr_folder=$(ls ${inpath} | grep -E "${fileroot}${olci_time}|${fileroot}${olci_time1}|${fileroot}${olci_time2}" | head -n1 || true)
+	
 	if [[ -z ${slstr_folder} ]]; then
-		log_err "No nearby SLSTR scene found"
+		log_warn "--> No nearby SLSTR scene found"
+		log_warn " Process next scene!"
 		continue
 	fi
+
 	log_info "${olci_folder}"
 	log_info "${slstr_folder}"
+	log_info " --> Processing scene: ${dest}"
 
-	log_info "Generating ${dest}"
 	mkdir -p "${dest}"
 
+        log_info "**********"
 	log_info "gpt: Start"
+	log_info "**********"
 	timing
+	
 	[[ $(which gpt) ]] || (
 		log_err "gpt not found"
 		exit 1
@@ -164,22 +176,27 @@ for folder in $(ls -d ${inpath}/S3*OL_1_EFR*.SEN3); do
 		  touch ${txt}
 		fi
 		
-		echo "GPT ERROR for scene ${olci_dts}" >> ${txt}
-		echo " - removed folder ${dest}" >> ${txt}
+		echo "GPT bigTiff error for scene ${olci_dts}" >> ${txt}
+		#echo " - removed folder ${dest}" >> ${txt}
 		echo " - S3 input OLCI not processed: ${inpath}/${olci_folder}" >> ${txt}
 		echo " - S3 input SLSTR not processed: ${inpath}/${slstr_folder}" >> ${txt}
 		echo " " >> ${txt}
 					
 		# remove destination folder of the scene
-		rm -rf  ${dest}
+		#rm -rf  ${dest}
 
 		log_warn "**********************************************************"		
-		log_warn "GPT ERROR for scene ${olci_dts}"
-		log_warn " - removed folder ${dest}" 
+		log_warn " GPT bigTiff error for scene ${olci_dts}"
+		#log_warn " - removed folder ${dest}" 
 		log_warn " - S3 input OLCI not processed: ${inpath}/${olci_folder}"}
 		log_warn " - S3 input SLSTR not processed: ${inpath}/${slstr_folder}" 
-		log_warn "Process next scene!"
-	
+		log_warn " Process next scene!"
+		log_warn "**********************************************************"		
+
+		#touch 'done' file
+		touch ${dest}/procScene.err
+		echo "$(date) - gpt bigTiff error for scene ${dest}" > ${dest}/procScene.err
+
 		# go to next scene
 		continue
 
@@ -189,10 +206,16 @@ for folder in $(ls -d ${inpath}/S3*OL_1_EFR*.SEN3); do
 	# -Ds3tbx.reader.olci.pixelGeoCoding=true \
 	# -Ds3tbx.reader.slstrl1b.pixelGeoCodings=true \
 
-	log_info "*******************"		
+	log_info "*************"		
 	log_info "gpt: Finished"
-	log_info "*******************"		
-
+	log_info "*************"		
+	
+	# if we ended up in gpt bigTiff error
+	if [[ -s "${dest}/procScene.err" ]]; then
+	   # go to next scene
+	   continue
+	fi
+	
 	# # Discard out bad folders (defined as size > 10 GB)
 	# (cd ${dest}/../; du -sm * | awk '$1 > 10000 {print $2}' | xargs rm -fr)
 	if [[ ! -d "${dest}" ]]; then continue; fi # if we removed the directory, break out of the loop
@@ -203,7 +226,12 @@ for folder in $(ls -d ${inpath}/S3*OL_1_EFR*.SEN3); do
 	grass -c ./mask.tif ${dest}/G_align --exec ./G_align.sh ${dest} ./mask.tif ${resize}
 	(cd ${dest} && rm *_x.tif)
 	(cd ${dest} && rm -fR G_align)
+
+	#touch 'done' file
+	touch ${dest}/procScene.done
+	echo "$(date) - gpt process OK for scene ${dest}" > ${dest}/procScene.done
+	
 done
 
-log_info "Finished: ${outpath}"
+log_info "S3_proc.sh finished: ${outpath}"
 timing

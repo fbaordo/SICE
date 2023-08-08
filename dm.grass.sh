@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/bash
 
 #set -o errexit
 set -o nounset
@@ -75,7 +75,7 @@ for scene in ${scenes}; do
 	r.reclass.area -c input=SCDA_clump output=SCDA_area value=10000 mode=greater --q
 	result=${?}
         if [ ${result} -ne 0 ] ; then
-         log_warn "  --> ERROR No areas of size greater than or equal to 10000 hectares found for rasters: ${scene}"
+         log_warn "  --> No areas of size greater than or equal to 10000 hectares found for rasters: ${scene}"
         fi
 	[[ "" == $(g.list type=raster pattern=SCDA_area) ]] && r.mapcalc "SCDA_area = null()" --q
 	# SZA_CM is SZA but Cloud Masked: Invalid where buffered clouds over ice w/ valid SZA

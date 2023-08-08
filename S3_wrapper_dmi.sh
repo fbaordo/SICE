@@ -1,14 +1,15 @@
-#!/bin/bash
+#!/usr/bin/bash
 
 # Wrapper for running SICE pipeline
-if [ $# -eq 4 ]; then
-  YYYYMMHH=$1
-  region=$2  
-  projectDir=$3
-  txtDir=$4
+if [ $# -eq 5 ]; then
+  procGptScenes=$1
+  YYYYMMHH=$2
+  region=$3  
+  projectDir=$4
+  txtDir=$5
 else
    echo "ERROR: incorrect number of command line arguments!"  
-   echo "Expected S3_wrapper_dmi.sh <YYYYMMDD> <region> <projectDir> <txtDir>"
+   echo "Expected S3_wrapper_dmi.sh <procGptScenes> <YYYYMMDD> <region> <projectDir> <txtDir>"
    exit 1
 fi
 
@@ -28,10 +29,12 @@ log_err() { echo -e "${red}[$(date --iso-8601=seconds)] [ERR] ${*}${nc}" 1>&2; }
 ################################################################################################
 #SETUP
 ################################################################################################
-
 # use SNAP gpt
-export PATH=${projectDir}/snap/bin:${PATH}
-
+if [[ ${HOSTNAME} == "hertz.dmi.dk" ]] ; then
+  export PATH=${projectDir}/snap/bin:${PATH}
+else
+  export PATH=/usr/local/snap/bin:${PATH}
+fi
 # This is necessary to avoid conflict with proj that belogs to conda env 
 export PROJ_LIB=/usr/share/proj
 
@@ -88,6 +91,9 @@ log_info "projectDir: ${projectDir}"
 log_info "SEN3_source: ${SEN3_source}"
 log_info "Processing region: ${region}" 
 log_info "Mask/Resolution to use is: ${mask_to_link}"
+log_info "procGptScenes is: ${procGptScenes}"
+log_info "export PATH is: ${PATH}"
+log_info "export PROJ_LIB is: ${PROJ_LIB}"
 log_info "******************************************"
 
 # Check if input data exist for the given date
@@ -113,6 +119,30 @@ fi
 if [[ -e mask.tif ]]; then
   rm mask.tif
   ln -s masks/${mask_to_link} mask.tif
+else
+  ln -s masks/${mask_to_link} mask.tif
+fi
+
+if [[ ${procGptScenes} == "TRUE" ]] ; then
+
+	# remove previous txt file if exist 
+	#if [[ -e "${txt_file}" ]]; then
+	#  rm ${txt_file}
+	#fi
+
+	log_info "******************************"
+	log_info "Executing S3_proc_dmi.sh..... "
+	log_info "******************************"
+
+	# SNAP: Reproject, calculate reflectance, extract bands, etc.
+	./S3_proc_dmi.sh -i ${SEN3_source}/${year}/"${date}" -o ${proc_root_region} -X ${xml_file} -T ${txt_file} -t 
+
+	result=${?}
+	if [ ${result} -ne 0 ] ; then
+	 log_err "S3_proc_dmi.sh processing error for ${date} and region ${region}"
+	fi  
+	
+  exit 0
 fi
 
 # Check if the expecetd output dir exists and have an output product for the given date
@@ -120,23 +150,6 @@ if [[ -d "${mosaic_root_region}/${date}" ]] && [[ -s "${mosaic_root_region}/${da
  log_warn "${mosaic_root_region}/${date} already contains outputs, we skip the processing"
  exit 0
 fi
-
-# remove previous txt file if exist 
-if [[ -e "${txt_file}" ]]; then
-  rm ${txt_file}
-fi
-
-log_info "******************************"
-log_info "Executing S3_proc_dmi.sh..... "
-log_info "******************************"
-
-# SNAP: Reproject, calculate reflectance, extract bands, etc.
-./S3_proc_dmi.sh -i ${SEN3_source}/${year}/"${date}" -o ${proc_root_region} -X ${xml_file} -T ${txt_file} -t 
-
-result=${?}
-if [ ${result} -ne 0 ] ; then
- log_err "S3_proc_dmi.sh processing error for ${date} and region ${region}"
-fi  
 
 log_info "***********************"
 log_info "Executing SCDA.py..... "

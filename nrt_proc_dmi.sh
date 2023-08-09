@@ -93,25 +93,26 @@ fi
 # This allows to run differnt regions in parallel 
 proc_region_dir=${projectDir}/procDir/${region}
 
+# make sure to link the right files from repository
 if [[ ! -d "${proc_region_dir}" ]]; then
- 
+
   mkdir -p ${proc_region_dir}
   
   cd ${proc_region_dir}
   
-  cp ${repDir}/S3_wrapper_dmi.sh .
-  cp ${repDir}/S3_proc_dmi.sh .
-  cp ${repDir}/dm*.sh .
-  cp ${repDir}/G*.sh .
-  cp ${repDir}/*.py .
-  cp ${repDir}/S3*.xml .
-  cp ${repDir}/*.dat .
-  cp -r ${repDir}/masks .
+  ln -s ${repDir}/S3_wrapper_dmi.sh .
+  ln -s ${repDir}/S3_proc_dmi.sh .
+  ln -s ${repDir}/dm*.sh .
+  ln -s ${repDir}/G*.sh .
+  ln -s ${repDir}/*.py .
+  ln -s ${repDir}/S3*.xml .
+  ln -s ${repDir}/*.dat .
+  ln -s ${repDir}/masks .
   
-  echo "$(date) - $(proc_region_dir) - Created! Files copied from ${repDir}"
+  echo "$(date) - ${proc_region_dir} - Created and files linked from ${repDir}"
   
-  touch ${proc_region_dir}/README.txt
-  echo "$(date) - $(proc_region_dir) - Created! Files copied from ${repDir}" >> ${proc_region_dir}/README.txt
+  touch ${proc_region_dir}/procDir.created
+  echo "$(date) - ${proc_region_dir} - Created and files linked from ${repDir}" >> ${proc_region_dir}/procDir.created
   
 fi   
 

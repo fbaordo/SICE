@@ -233,5 +233,7 @@ for folder in $(ls -d ${inpath}/S3*OL_1_EFR*.SEN3); do
 	
 done
 
-log_info "S3_proc.sh finished: ${outpath}"
-timing
+log_info "***********************"
+log_info "S3_proc_dmi.sh finished"
+log_info "***********************"
+#timing

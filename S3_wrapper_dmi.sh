@@ -97,7 +97,7 @@ log_info "export PROJ_LIB is: ${PROJ_LIB}"
 log_info "******************************************"
 
 # Check if input data exist for the given date
-if [[ ! -d "${SEN3_source}/${year}/${date}" ]]; then
+if [[ ! -d "${SEN3_source}/${year}/${date}" ]] && [[ ${procGptScenes} == "TRUE" ]]; then
   log_err "S3 input data not found for ${date}! S3 input data dir ${SEN3_source}/${year}/${date} does not exist!"
   exit 1
 fi
@@ -123,26 +123,23 @@ else
   ln -s masks/${mask_to_link} mask.tif
 fi
 
-if [[ ${procGptScenes} == "TRUE" ]] ; then
+if [[ ${procGptScenes} == "TRUE" ]]; then
 
-	# remove previous txt file if exist 
-	#if [[ -e "${txt_file}" ]]; then
-	#  rm ${txt_file}
-	#fi
+  log_info "******************************"
+  log_info "Executing S3_proc_dmi.sh..... "
+  log_info "******************************"
 
-	log_info "******************************"
-	log_info "Executing S3_proc_dmi.sh..... "
-	log_info "******************************"
+  # SNAP: Reproject, calculate reflectance, extract bands, etc.
+  ./S3_proc_dmi.sh -i ${SEN3_source}/${year}/"${date}" -o ${proc_root_region} -X ${xml_file} -T ${txt_file} -t 
 
-	# SNAP: Reproject, calculate reflectance, extract bands, etc.
-	./S3_proc_dmi.sh -i ${SEN3_source}/${year}/"${date}" -o ${proc_root_region} -X ${xml_file} -T ${txt_file} -t 
-
-	result=${?}
-	if [ ${result} -ne 0 ] ; then
-	 log_err "S3_proc_dmi.sh processing error for ${date} and region ${region}"
-	fi  
-	
+  result=${?}
+  if [ ${result} -ne 0 ] ; then
+   log_err "S3_proc_dmi.sh processing error for ${date} and region ${region}"
+   exit 1
+  fi
+    	
   exit 0
+  
 fi
 
 # Check if the expecetd output dir exists and have an output product for the given date
@@ -150,6 +147,16 @@ if [[ -d "${mosaic_root_region}/${date}" ]] && [[ -s "${mosaic_root_region}/${da
  log_warn "${mosaic_root_region}/${date} already contains outputs, we skip the processing"
  exit 0
 fi
+
+# remove scenes that were not processed for bigtiff err
+for folder in $(ls -d ${proc_root_region}/*); do 
+
+  if [[ -e "${folder}/procScene.err" ]]; then
+    rm -rf ${folder}
+    log_warn " --> procScene.err found for scene ${folder}, remove folder!"
+  fi 
+
+done
 
 log_info "***********************"
 log_info "Executing SCDA.py..... "

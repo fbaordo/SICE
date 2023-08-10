@@ -14,7 +14,7 @@ else
 fi
 
 set -o errexit
-set -o nounset
+#set -o nounset
 set -o pipefail
 #set -x
 
@@ -35,7 +35,7 @@ if [[ ${HOSTNAME} == "hertz.dmi.dk" ]] ; then
 else
   export PATH=/usr/local/snap/bin:${PATH}
 fi
-# This is necessary to avoid conflict with proj that belogs to conda env 
+# This seems necessary to avoid conflict with proj that belogs to conda env 
 export PROJ_LIB=/usr/share/proj
 
 # Expected S3 input data for a given date
@@ -162,12 +162,18 @@ log_info "***********************"
 log_info "Executing SCDA.py..... "
 log_info "***********************"
 # Run the Simple Cloud Detection Algorithm (SCDA)
-python ./SCDA.py ${proc_root_region}
 
+# activate SICE miniconda python env 
+. ${projectDir}/./sourceCondaEnv.sh SICE
+
+python ./SCDA.py ${proc_root_region}
 result=${?}
 if [ ${result} -ne 0 ] ; then
   log_err "SCDA.py processing error for ${date} and region ${region}"
 fi  
+
+#deactivate
+conda deactivate
 
 log_info "*********************"
 log_info "Executing dm.sh..... "
@@ -182,18 +188,29 @@ fi
 
 if [ "${slopey}" = true ]; then
   # Run the slopey correction
+  
+  # activate SICE miniconda python env 
+  . ${projectDir}/./sourceCondaEnv.sh SICE  
+  
   python ./get_ITOAR.py ${mosaic_root_region} / "$(pwd)"/ArcticDEM/ 
 
   result=${?}
   if [ ${result} -ne 0 ] ; then
     log_err "get_ITOAR.py processing error for ${date} and region ${region}"
   fi  
+
+  #deactivate
+  conda deactivate
+  
 fi
 
 log_info "***********************"
 log_info "Executing sice.py..... "
 log_info "***********************"
 # SICE
+# activate SICE miniconda python env 
+. ${projectDir}/./sourceCondaEnv.sh SICE  
+
 python ./sice.py ${mosaic_root_region}/${date}
 
 result=${?}
@@ -201,4 +218,6 @@ if [ ${result} -ne 0 ] ; then
   log_err "sice.py processing error for ${date} and region ${region}"
 fi  
 
+#deactivate
+conda deactivate
 

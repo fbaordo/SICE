@@ -45,6 +45,7 @@ if [[ ! -d "${projectDir}" ]]; then
   exit 1
 fi
 
+# conda env is activate/deactivated in S3_wrapper_dmi.sh
 if [[ ! -e "${projectDir}/sourceCondaEnv.sh" ]]; then
   echo "ERROR! ${projectDir}/sourceCondaEnv.sh not found!"
   exit 1
@@ -64,9 +65,6 @@ fi
 if [[ ! -d "${txtDir}" ]]; then
   mkdir ${txtDir}
 fi
-
-# activate SICE miniconda python env (I got a conflict if I do this within S3_wrapper_dmi.sh)
-. ${projectDir}/./sourceCondaEnv.sh SICE
 
 txtDir_region=${txtDir}/${region}
 logDir_region=${logDir}/${region}

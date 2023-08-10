@@ -124,14 +124,21 @@ for folder in $(ls -d ${inpath}/S3*OL_1_EFR*.SEN3); do
 	# skipping if scene already processed
 	if [[ -d "${dest}" ]]; then
 		#if [[ -s "${dest}/r_TOA_01.tif" ]]; then
+		
 		if [[ -s "${dest}/procScene.done" ]]; then
 			log_warn "${dest}/procScene.done exists, skip scene!"
 			continue
 		fi
+		
 		if [[ -s "${dest}/procScene.err" ]]; then
 			log_warn "${dest}/procScene.err exists, skip scene!"
 			continue
 		fi
+		
+		if [[ -s "${dest}/procScene.running" ]]; then
+			log_info "${dest}/procScene.running exists, scene processing ongoing!"
+			continue
+		fi		
 
 	fi
 
@@ -161,6 +168,9 @@ for folder in $(ls -d ${inpath}/S3*OL_1_EFR*.SEN3); do
 	log_info "**********"
 	timing
 	
+	touch ${dest}/procScene.running
+	echo "$(date) - processing started for scene ${dest}" > ${dest}/procScene.running
+		
 	[[ $(which gpt) ]] || (
 		log_err "gpt not found"
 		exit 1
@@ -197,6 +207,8 @@ for folder in $(ls -d ${inpath}/S3*OL_1_EFR*.SEN3); do
 		touch ${dest}/procScene.err
 		echo "$(date) - gpt bigTiff error for scene ${dest}" > ${dest}/procScene.err
 
+               rm ${dest}/procScene.running
+
 		# go to next scene
 		continue
 
@@ -230,6 +242,8 @@ for folder in $(ls -d ${inpath}/S3*OL_1_EFR*.SEN3); do
 	#touch 'done' file
 	touch ${dest}/procScene.done
 	echo "$(date) - gpt process OK for scene ${dest}" > ${dest}/procScene.done
+	
+	rm ${dest}/procScene.running
 	
 done
 

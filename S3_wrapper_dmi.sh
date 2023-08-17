@@ -161,11 +161,11 @@ done
 log_info "***********************"
 log_info "Executing SCDA.py..... "
 log_info "***********************"
-# Run the Simple Cloud Detection Algorithm (SCDA)
 
 # activate SICE miniconda python env 
 . ${projectDir}/./sourceCondaEnv.sh SICE
 
+# Run the Simple Cloud Detection Algorithm (SCDA)
 python ./SCDA.py ${proc_root_region}
 result=${?}
 if [ ${result} -ne 0 ] ; then
@@ -179,38 +179,32 @@ log_info "*********************"
 log_info "Executing dm.sh..... "
 log_info "*********************"
 # Mosaic
-./dm.sh "${date}" ${proc_root_region} ${mosaic_root_region} 
+./dm.sh "${date}" ${proc_root_region} ${mosaic_root_region}
 
 result=${?}
 if [ ${result} -ne 0 ] ; then
   log_err "dm.sh processing error for ${date} and region ${region}"
 fi  
 
+# activate SICE miniconda python env 
+. ${projectDir}/./sourceCondaEnv.sh SICE
+
 if [ "${slopey}" = true ]; then
   # Run the slopey correction
-  
-  # activate SICE miniconda python env 
-  . ${projectDir}/./sourceCondaEnv.sh SICE  
-  
   python ./get_ITOAR.py ${mosaic_root_region} / "$(pwd)"/ArcticDEM/ 
 
   result=${?}
   if [ ${result} -ne 0 ] ; then
     log_err "get_ITOAR.py processing error for ${date} and region ${region}"
   fi  
-
-  #deactivate
-  conda deactivate
   
 fi
 
 log_info "***********************"
 log_info "Executing sice.py..... "
 log_info "***********************"
-# SICE
-# activate SICE miniconda python env 
-. ${projectDir}/./sourceCondaEnv.sh SICE  
 
+# SICE
 python ./sice.py ${mosaic_root_region}/${date}
 
 result=${?}

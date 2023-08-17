@@ -136,7 +136,7 @@ n_imgs=$(echo $sza_lut_idxs | wc -w)
 
 # link sza_lut_idxs with scene IDs
 output=$(
-	python <<END
+	python3 <<END
 import pandas as pd
 import numpy as np
 scenes_str = "${sza_list}"
@@ -149,7 +149,8 @@ END
 )
 
 # save idxs_ids in txt file
-echo "${output}" >>${outfolder}/${date}/scenes_lut.txt
+touch ${outfolder}/${date}/scenes_lut.txt
+echo "${output}" | cat > ${outfolder}/${date}/scenes_lut.txt
 
 # generate a raster of nulls that we can then patch into
 log_info "Initializing mosaic scenes..."

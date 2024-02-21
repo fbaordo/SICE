@@ -112,9 +112,21 @@ if [[ ! -d "${proc_region_dir}" ]]; then
   touch ${proc_region_dir}/procDir.created
   echo "$(date) - ${proc_region_dir} - Created and files linked from ${repDir}" >> ${proc_region_dir}/procDir.created
   
-fi   
+fi
+
+case ${procGptScenes} in
+    TRUE)
+        LOGFILENAME="S3_proc_${basedate}.log"
+	;;
+    FALSE)
+        LOGFILENAME="S3_mosaic_${basedate}.log"
+	;;
+    *)
+        LOGFILENAME="S3_unknown_procGptScenes_${basedate}.log"
+	;;
+esac
 
 cd ${proc_region_dir}
-./S3_wrapper_dmi.sh ${procGptScenes} ${basedate} ${region} ${projectDir} ${txtDir_region} >> ${logDir_region}/S3_proc_${basedate}.log
+./S3_wrapper_dmi.sh ${procGptScenes} ${basedate} ${region} ${projectDir} ${txtDir_region} | tee -a "${logDir_region}/${LOGFILENAME}"
 
 
